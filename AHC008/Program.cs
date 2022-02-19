@@ -132,7 +132,12 @@ namespace AtCoder.AHC008
 
     }
     public static class MovingObject{
-        public static Pos Shift(Direction direction){
+        public static Pos Shift(Pos pos, Direction direction)
+        {
+            var shiftVector = GetShiftVector(direction);
+            return pos+shiftVector;
+        }
+        public static Pos GetShiftVector(Direction direction){
             switch (direction)
             {
                 case Direction.None:
@@ -146,7 +151,7 @@ namespace AtCoder.AHC008
                 case Direction.Right:
                     return new Pos(0, 1);
                 default:
-                    throw new ArgumentException($"{nameof(Shift)}Error");
+                    throw new ArgumentException($"{nameof(GetShiftVector)}Error");
             }
         }
 
@@ -162,7 +167,7 @@ namespace AtCoder.AHC008
         
         public static bool StandardMove(IMovingObject movingObject, Direction direction)
         {
-            Pos nextPos = movingObject.Pos + MovingObject.Shift(direction);
+            Pos nextPos = movingObject.Pos + MovingObject.GetShiftVector(direction);
             return StandardCheckAndMove(movingObject, nextPos);
         }
 
@@ -182,7 +187,7 @@ namespace AtCoder.AHC008
         public IEnumerable<Pos> GetMovableArea(){
 
             foreach( Direction direction in Enum.GetValues(typeof(Direction))){
-                var checkPos = Pos + MovingObject.Shift(direction);
+                var checkPos = Pos + MovingObject.GetShiftVector(direction);
                 if(MovingObject.CheckMovable(Pos, Board)){
                     yield return checkPos;
                 }
@@ -220,7 +225,7 @@ namespace AtCoder.AHC008
         }
 
         bool MakeWall(Direction direction){
-            var constructionSite = this.Pos + MovingObject.Shift(direction);
+            var constructionSite = MovingObject.Shift(this.Pos,direction);
             return CheckAndMakeWall(constructionSite);
         }
 
@@ -236,7 +241,7 @@ namespace AtCoder.AHC008
         {
             foreach(Direction direction in Enum.GetValues(typeof(Direction))){
                 try{
-                    var shiftVector = MovingObject.Shift(direction);
+                    var shiftVector = MovingObject.GetShiftVector(direction);
                     var floorType = board[constructionSite+shiftVector];
                     if(direction == Direction.None){
                         if(floorType != FloorType.None){
@@ -271,54 +276,23 @@ namespace AtCoder.AHC008
 
         public virtual IEnumerable<Pos> GetMovableArea()
         {
-            Pos[] checkPositions;
-            if(TotalMoveCnt == 1){
-                checkPositions = new Pos[4]{
-                    Pos+ MovingObject.Shift(Direction.Up),
-                    Pos+ MovingObject.Shift(Direction.Down),
-                    Pos+ MovingObject.Shift(Direction.Left),
-                    Pos+ MovingObject.Shift(Direction.Right),
-                };
+            IEnumerable<Pos> checkPositions = new Pos[]{Pos};
+            for(int moveCnt = 0; moveCnt < TotalMoveCnt-1; ++moveCnt){
+                checkPositions = SearchMovablePositions(checkPositions);
             }
-            else if(TotalMoveCnt == 2){
-                checkPositions = new Pos[9]{
-                    Pos + new Pos(-2, 0),
-                    Pos + new Pos(-1, -1),
-                    Pos + new Pos(-1, 1),
-                    Pos + new Pos(0, -2),
-                    Pos,
-                    Pos + new Pos(0, 2),
-                    Pos + new Pos(1, -1),
-                    Pos + new Pos(1, 1),
-                    Pos + new Pos(2, 0),
-                };
-            } else if(TotalMoveCnt == 3){
-                checkPositions = new Pos[16]{
-                    Pos + new Pos(-3, 0),
-                    Pos + new Pos(-2, -1),
-                    Pos + new Pos(-2, 1),
-                    Pos + new Pos(-1, -2),
-                    Pos + new Pos(-1, 0),
-                    Pos + new Pos(-1, 2),
-                    Pos + new Pos(0, -3),
-                    Pos + new Pos(0, -1),
-                    Pos + new Pos(0, 1),
-                    Pos + new Pos(0, 3),
-                    Pos + new Pos(1, -2),
-                    Pos + new Pos(1, 0),
-                    Pos + new Pos(1, 2),
-                    Pos + new Pos(2, -1),
-                    Pos + new Pos(2, 1),
-                    Pos + new Pos(3, 0),
-                };
-            } else{
-                throw new ArgumentException($"{nameof(GetMovableArea)}Error");
-            }
-            foreach(var checkPosition in checkPositions){
-                if(MovingObject.CheckMovable(checkPosition, Board)){
-                    yield return checkPosition;
-                }
-            }
+            return SearchMovablePositions(checkPositions);
+        }
+
+        IEnumerable<Pos> SearchMovablePositions(IEnumerable<Pos> checkPositions){
+            foreach (var checkPosition in checkPositions)
+            {
+                foreach(Direction direcion in Enum.GetValues(typeof(Direction))){
+                    var targetPos = MovingObject.Shift(checkPosition, direcion);
+                    if( MovingObject.CheckMovable(targetPos, Board)){
+                        yield return targetPos;
+                    }
+                }                
+            } 
         }
 
         public bool Action(string actionCommand){
