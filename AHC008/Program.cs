@@ -324,7 +324,40 @@ namespace AtCoder.AHC008
     public class Cow : Pet{
         public override int TotalMoveCnt {get {return 1;}}
         public override bool Move(Direction direction){
-            return true;
+            return MovingObject.StandardMove(this, direction);
+        }
+    }
+
+    public class Pig : Pet
+    {
+        public override int TotalMoveCnt {get {return 2;}}
+        public override bool Move(Direction direction){
+            return MovingObject.StandardMove(this, direction);
+        }
+    }
+
+    public class Rabbit : Pet
+    {
+        public override int TotalMoveCnt {get {return 3;}}
+        public override bool Move(Direction direction){
+            return MovingObject.StandardMove(this, direction);
+        }
+    }
+
+    public class Dog : Pet
+    {
+        public override int TotalMoveCnt {get {return 2;}}
+        public override bool Move(Direction direction){
+            return MovingObject.StandardMove(this, direction);
+        }
+    }
+
+
+    public class Cat : Pet
+    {
+        public override int TotalMoveCnt {get {return 2;}}
+        public override bool Move(Direction direction){
+            return MovingObject.StandardMove(this, direction);
         }
     }
 
