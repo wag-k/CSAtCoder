@@ -119,7 +119,17 @@ namespace AtCoder.AHC008
         public Board Board{get; set;}
         public int Score{ get; set;}
 
+        /// <summary>
+        /// スコア計算の高速化は肝になる気がする。
+        /// 自分の領土にペットがいないことが最優先
+        /// 深さをメモしてBFSすればよい
+        /// BFS & Union-Find Grouping
+        /// </summary>
+        /// <param name="human"></param>
+        /// <param name="board"></param>
+        /// <returns></returns>
         public static long CalcScore(Human human, Board board){
+
             return 0;
         }
     }
@@ -397,8 +407,71 @@ namespace AtCoder.AHC008
 
 namespace AtCoder
 {
+
     /// <summary>
-    /// takytankさんのテンプレートを拝借
+    /// 蟻本の実装そのまま
+    /// </summary>
+    public class UnionFindTree
+    {
+        public int Count { get; private set;}
+
+        private int[] _parent;
+
+        private int[] _rank;
+
+        private UnionFindTree(){}
+        public UnionFindTree(int treeSize)
+        {
+            Count = treeSize;
+            _parent = new int[Count];
+            _rank = new int[Count];
+            for (int index = 0; index < Count; index++)
+            {
+                _parent[index] = index;
+                _rank[index] = 0;
+            }
+        }
+
+        public int FindRoot(int searchIndex)
+        {
+            if(_parent[searchIndex] == searchIndex)
+            {
+                return searchIndex;
+            } else
+            {
+                return _parent[searchIndex] = FindRoot(_parent[searchIndex]);
+            }
+        }
+
+        public void Unite(int x, int y)
+        {
+            x = FindRoot(x);
+            y = FindRoot(y);
+
+            if(x == y){return;}
+
+            if(_rank[x] < _rank[y])
+            {
+                _parent[x] = y;
+            }
+            else
+            {
+                _parent[y] = x;
+                if(_rank[x] == _rank[y])
+                {
+                    _rank[x]++;
+                }
+            }
+        }
+
+        public bool IsSame(int x, int y)
+        {
+            return FindRoot(x) == FindRoot(y);
+        }
+    }
+
+    /// <summary>
+    /// ここから下はtakytankさんのテンプレートを拝借
     /// </summary>
     public static class ModCounting
     {
