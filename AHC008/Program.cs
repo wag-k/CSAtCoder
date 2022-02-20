@@ -15,7 +15,7 @@ using System.Text;
 
 namespace AtCoder.AHC008
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
@@ -24,15 +24,15 @@ namespace AtCoder.AHC008
 
             using var cin = new Scanner();
             int numPets = cin.Int();
-            var incrementPos = new Pos(1,1); // Boardに壁を作るため、１個インクリメントして座標を登録する。
+            //var incrementPos = new Pos(1,1); // Boardに壁を作るため、１個インクリメントして座標を登録する。
             var initPetsPositions = new (int, int, int)[numPets];
             //Console.WriteLine("#PetsNumDone");
             var pets = new Pet[numPets];
             for(int n = 0; n < numPets; ++n)
             {
                 initPetsPositions[n] = cin.Int3();
-                var initPos = new Pos(initPetsPositions[n].Item1, initPetsPositions[n].Item2) + incrementPos;
-                pets[n] = PetFactory.Create((PetType)initPetsPositions[numPets].Item3, initPos, initBoard);
+                var initPos = new Pos(initPetsPositions[n].Item1, initPetsPositions[n].Item2);
+                pets[n] = PetFactory.Create((PetType)initPetsPositions[n].Item3, initPos, initBoard);
             }
 
             //Console.WriteLine("#PetsInputDone");
@@ -43,7 +43,7 @@ namespace AtCoder.AHC008
                 initHumansPositions[m] = cin.Int2();
                 WriteLine($"#{initHumansPositions[m].Item1}, {initHumansPositions[m].Item2}");
 
-                var initPos = new Pos(initHumansPositions[m].Item1, initHumansPositions[m].Item2) + incrementPos;
+                var initPos = new Pos(initHumansPositions[m].Item1, initHumansPositions[m].Item2);
                 humans[m] = HumanFactory.Create(initPos, initBoard);
             }
 
@@ -78,13 +78,17 @@ namespace AtCoder.AHC008
                     currentScene.Pets[n].Action(petActions[n]);
                 }
                 var currentScore = currentScene.CalcTotalScore();
-                WriteLine($"Turn: {currentScene.Score}, Score: {currentScore}");
+                WriteLine($"#Turn: {currentScene.Turn}, Score: {currentScore}");
+                if(298 <= currentScene.Turn){
+                    currentScene.Board.Show();
+                }
                 currentScene = new Scene(currentScene);
+                currentScene.Refresh();
                 currentScene.Turn += 1;
             }
         }
 
-        static void WriteLine(string msg){
+        public static void WriteLine(string msg){
             Console.WriteLine(msg);
             Console.Out.Flush();
         }
@@ -173,6 +177,21 @@ namespace AtCoder.AHC008
             ).ToArray();
         }
 
+        public void Refresh()
+        {
+            Board = new Board();
+            for (int m = 0; m < Humans.Length; ++m)
+            {
+                var human = Humans[m];
+                Board[human.Pos] = FloorType.Human;
+            }
+            for (int n = 0; n < Pets.Length; ++n)
+            {
+                var pet = Pets[n];
+                Board[pet.Pos] = FloorType.Pet;
+            }
+        }
+
         /// <summary>
         /// スコア計算の高速化は肝になる気がする。
         /// 自分の領土にペットがいないことが最優先
@@ -185,15 +204,27 @@ namespace AtCoder.AHC008
         public int CalcTotalScore(){
             if(BoardGroup == null) 
             {
-                MakeBoardGroup(this);
+                this.BoardGroup = MakeBoardGroup(this);
             }
 
             double totalScore = 0;
+            // そのグループに属していたら何点か？
+            // ここ高速化できる。
+            var groupScores = new double[Board.Width*Board.Height];
+
             for(int humanIndex = 0; humanIndex < Humans.Length; ++humanIndex)
             {
                 var human = Humans[humanIndex];
                 var humanPosIndex = Board.GetBoardIndex(human.Pos);
                 var humanGroup = BoardGroup.FindRoot(humanPosIndex);
+
+                // すでに探索ずみの場合はメモしておいたスコアを使う。
+                // スコアは必ず0より大きい
+                if(0 < groupScores[BoardGroup.FindRoot(humanPosIndex)])
+                {
+                    totalScore += groupScores[BoardGroup.FindRoot(humanPosIndex)];
+                    continue;
+                }
 
                 var petNum = 0; // ｈumanのエリアに何匹Petがいるか？
                 for (int petIndex = 0; petIndex < Pets.Length; ++petIndex)
@@ -208,6 +239,7 @@ namespace AtCoder.AHC008
                 }
                 var groupSize = BoardGroup.FindGroupSize(humanGroup);
                 var score = groupSize*Math.Pow(2, -petNum);
+                groupScores[BoardGroup.FindRoot(humanPosIndex)] = score;
                 totalScore += score;
             }
             var coef = 100000000;
@@ -220,7 +252,7 @@ namespace AtCoder.AHC008
         /// もし、ペットのユニオンサイズが１ならそこに人はいない。
         /// </summary>
         /// <param name="scene"></param>
-        public static void MakeBoardGroup(Scene scene)
+        public static UnionFindTreeWithUnionSize MakeBoardGroup(Scene scene)
         {
             var board = scene.Board;
             var boardGroup = new UnionFindTreeWithUnionSize(board.Height*board.Width);
@@ -236,13 +268,18 @@ namespace AtCoder.AHC008
                     var currentPosIndex = board.GetBoardIndex(currentPos);
                     foreach(Direction direcion in Enum.GetValues(typeof(Direction))){
                         var targetPos = MovingObject.Shift(currentPos, direcion);
-                        if( MovingObject.CheckMovable(targetPos, board)){
+                        // 一度訪れたことのあるマスのUniteSizeは１よりい大きい
+                        if(
+                            ( MovingObject.CheckMovable(targetPos, board)) 
+                            && (boardGroup.FindGroupSize(board.GetBoardIndex(targetPos)) <= 1))
+                        {
                             queue.Enqueue(targetPos);
                             boardGroup.Unite(currentPosIndex, board.GetBoardIndex(targetPos));
                         }
                     }        
                 }
             }
+            return boardGroup;
         }
 
 
@@ -515,19 +552,21 @@ namespace AtCoder.AHC008
         }
 
         public bool Action(string actionCommand){
-            for (int moveCnt = 0; moveCnt < TotalMoveCnt; ++moveCnt){
-                switch (actionCommand)
+            var totalActionCnt = actionCommand.Length;
+            for (int actionCnt = 0; actionCnt < totalActionCnt; ++actionCnt){
+                var command = actionCommand[actionCnt];
+                switch (command)
                 {
-                    case "U":
+                    case 'U':
                         Move(Direction.Up);
                         break;
-                    case "D":
+                    case 'D':
                         Move(Direction.Down);
                         break;
-                    case "L":
+                    case 'L':
                         Move(Direction.Left);
                         break;
-                    case "R":
+                    case 'R':
                         Move(Direction.Right);
                         break;
                     default:
@@ -665,6 +704,25 @@ namespace AtCoder.AHC008
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetBoardIndex(Pos pos){
             return Width * pos.Y + pos.X;
+        }
+
+        static Dictionary<FloorType, string> _floorTypeToCharDict = new Dictionary<FloorType, string>{
+            {FloorType.None, "_"},
+            {FloorType.Human, "H"},
+            {FloorType.Pet, "P"},
+            {FloorType.PetAndHuman, "B"},
+            {FloorType.Wall, "#"},
+        };
+
+        public void Show()
+        {
+            for(int w = 0; w < Width; ++w){
+                var lineBoardSB = new StringBuilder();
+                for ( int h = 0; h < Height ; ++h){
+                    lineBoardSB.Append(_floorTypeToCharDict[this[w, h]]);
+                }
+                Program.WriteLine(lineBoardSB.ToString());
+            }
         }
     }
 
