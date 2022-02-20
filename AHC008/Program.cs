@@ -19,38 +19,68 @@ namespace AtCoder.AHC008
     {
         static void Main(string[] args)
         {
+            // 初期位置を記したボード
+            var initBoard = new Board();
+
             using var cin = new Scanner();
             int numPets = cin.Int();
             var incrementPos = new Pos(1,1); // Boardに壁を作るため、１個インクリメントして座標を登録する。
             var initPetsPositions = new (int, int, int)[numPets];
             //Console.WriteLine("#PetsNumDone");
+            var pets = new Pet[numPets];
             for(int n = 0; n < numPets; ++n)
             {
                 initPetsPositions[n] = cin.Int3();
+                var initPos = new Pos(initPetsPositions[n].Item1, initPetsPositions[n].Item2) + incrementPos;
+                pets[n] = PetFactory.Create((PetType)initPetsPositions[numPets].Item3, initPos, initBoard);
             }
+
             //Console.WriteLine("#PetsInputDone");
             var numHumans = cin.Int();
             var initHumansPositions = new (int, int)[numHumans];
+            var humans = new Human[numHumans];
             for(int m = 0; m < numHumans; ++m){
                 initHumansPositions[m] = cin.Int2();
                 WriteLine($"#{initHumansPositions[m].Item1}, {initHumansPositions[m].Item2}");
+
+                var initPos = new Pos(initHumansPositions[m].Item1, initHumansPositions[m].Item2) + incrementPos;
+                humans[m] = HumanFactory.Create(initPos, initBoard);
             }
 
             WriteLine("#HumansInputDone");
+            var initScene = new Scene()
+            {
+                Turn = 0,
+                Humans = humans,
+                Pets = pets  ,
+                Board = initBoard
+            };
 
             var territorySimulator = new TerritorySimulator(){
             };
 
+
             int totalTurnCnt = 300;
             var currentPetsPositions = new int[numPets];
+            var currentScene = new Scene(initScene);
             for(int turnCnt = 0; turnCnt < totalTurnCnt ; ++ turnCnt){
                 var outSB = new StringBuilder();                
                 for(int m = 0; m < numHumans; ++m){
-                    outSB.Append(".");
+                    var humanAction = ".";
+                    currentScene.Humans[m].Action(humanAction);
+                    outSB.Append(humanAction);
                 } 
                 WriteLine(outSB.ToString());
             
-                var next = cin.ArrayString(numPets);
+                var petActions = cin.ArrayString(numPets);
+                for(int n = 0; n < numPets; ++n)
+                {
+                    currentScene.Pets[n].Action(petActions[n]);
+                }
+                var currentScore = currentScene.CalcTotalScore();
+                WriteLine($"Turn: {currentScene.Score}, Score: {currentScore}");
+                currentScene = new Scene(currentScene);
+                currentScene.Turn += 1;
             }
         }
 
@@ -113,12 +143,35 @@ namespace AtCoder.AHC008
     }
 
     public class Scene{
-        int Turn {get; set;}
+        public int Turn {get; set;}
         public Human[] Humans { get; set;} 
         public Pet[] Pets {get; set;}
         public Board Board{get; set;}
         public UnionFindTreeWithUnionSize BoardGroup { get; private set;}
         public int Score{ get; set;}
+
+        public Scene(){}
+
+        /// <summary>
+        /// スコアは引き継がない。
+        /// </summary>
+        /// <param name="originalScene"></param>
+
+        public Scene(Scene originalScene)
+        {
+            Turn = originalScene.Turn;
+            Board = new Board(originalScene.Board);
+            Humans =
+            ( 
+                from human in originalScene.Humans
+                select HumanFactory.Create(human.Pos, Board)
+            ).ToArray();
+            Pets = 
+            (
+                from pet in originalScene.Pets
+                select PetFactory.Create(pet.PetType, pet.Pos, Board)
+            ).ToArray();
+        }
 
         /// <summary>
         /// スコア計算の高速化は肝になる気がする。
@@ -296,6 +349,18 @@ namespace AtCoder.AHC008
 
     }
 
+    public static class HumanFactory
+    {
+        public static Human Create(Pos pos, Board board)
+        {
+            board[pos] = FloorType.Human;
+            return new Human(){
+                Pos = pos,
+                Board = board
+            };
+        }
+    }
+
     public class Human : IMovingObject{
         public Pos Pos{get; set;}
         public Board Board{get; set; }
@@ -378,10 +443,49 @@ namespace AtCoder.AHC008
         }
     }
 
+    public static class PetFactory
+    {
+        public static Pet Create(PetType petType, Pos pos, Board board)
+        {
+            board[pos] = FloorType.Pet;
+            switch (petType)
+            {
+                case PetType.Cow:
+                    return new Cow(){
+                        Pos = pos,
+                        Board = board
+                    };
+                case PetType.Pig:
+                    return new Pig(){
+                        Pos = pos,
+                        Board = board
+                    };
+                case PetType.Rabbit:
+                    return new Rabbit(){
+                        Pos = pos,
+                        Board = board
+                    };
+                case PetType.Dog:
+                    return new Dog(){
+                        Pos = pos,
+                        Board = board
+                    };
+                case PetType.Cat:
+                    return new Cat(){
+                        Pos = pos,
+                        Board = board
+                    };
+                default:
+                    throw new ArgumentException("CreateError");
+            }
+        }
+    }
+
     public abstract class Pet : IMovingObject{
 
         public Pos Pos{get; set;}
         public Board Board{get; set; }
+        public abstract PetType PetType {get;}
 
         /// <summary>
         /// How many times does a pet move in 1 turn 
@@ -437,6 +541,7 @@ namespace AtCoder.AHC008
     }
 
     public class Cow : Pet{
+        public override PetType PetType => PetType.Cow; 
         public override int TotalMoveCnt {get {return 1;}}
         public override bool Move(Direction direction){
             return MovingObject.StandardMove(this, direction);
@@ -445,6 +550,7 @@ namespace AtCoder.AHC008
 
     public class Pig : Pet
     {
+        public override PetType PetType => PetType.Pig; 
         public override int TotalMoveCnt {get {return 2;}}
         public override bool Move(Direction direction){
             return MovingObject.StandardMove(this, direction);
@@ -453,6 +559,7 @@ namespace AtCoder.AHC008
 
     public class Rabbit : Pet
     {
+        public override PetType PetType => PetType.Rabbit; 
         public override int TotalMoveCnt {get {return 3;}}
         public override bool Move(Direction direction){
             return MovingObject.StandardMove(this, direction);
@@ -461,6 +568,7 @@ namespace AtCoder.AHC008
 
     public class Dog : Pet
     {
+        public override PetType PetType => PetType.Dog; 
         public override int TotalMoveCnt {get {return 2;}}
         public override bool Move(Direction direction){
             return MovingObject.StandardMove(this, direction);
@@ -470,6 +578,7 @@ namespace AtCoder.AHC008
 
     public class Cat : Pet
     {
+        public override PetType PetType => PetType.Cat; 
         public override int TotalMoveCnt {get {return 2;}}
         public override bool Move(Direction direction){
             return MovingObject.StandardMove(this, direction);
@@ -521,6 +630,36 @@ namespace AtCoder.AHC008
                 this[w, 0] = FloorType.Wall;
                 this[w, lastHeightIndex] = FloorType.Wall;
             }
+        }
+
+        public Board(Board originalBoard){
+            int lastWidthIndex = Width-1;
+            int lastHeightIndex = Height-1;
+            for(int h = 0; h < Height; ++h){
+                for ( int w = 0; w < Width ; ++w){
+                    this[w, h] = originalBoard[w,h];
+                }
+            }
+        }
+
+        /// <summary>
+        /// 初期配置からボードを生成。壁は作れないので注意。
+        /// </summary>
+        /// <param name="humans"></param>
+        /// <param name="pets"></param>
+        /// <returns></returns>
+        public static Board Create(IMovingObject[] humans, IMovingObject[] pets)
+        {
+            var board = new Board();
+            foreach(var human in humans)
+            {
+                board[human.Pos] = FloorType.Human;
+            }
+            foreach(var pet in pets)
+            {
+                board[pet.Pos] = FloorType.Pet;
+            }
+            return board;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
