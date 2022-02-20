@@ -117,6 +117,7 @@ namespace AtCoder.AHC008
         public Human[] Humans { get; set;} 
         public Pet[] Pets {get; set;}
         public Board Board{get; set;}
+        public UnionFindTreeWithUnionSize BoardGroup { get; private set;}
         public int Score{ get; set;}
 
         /// <summary>
@@ -128,9 +129,113 @@ namespace AtCoder.AHC008
         /// <param name="human"></param>
         /// <param name="board"></param>
         /// <returns></returns>
-        public static long CalcScore(Human human, Board board){
+        public int CalcTotalScore(){
+            if(BoardGroup == null) 
+            {
+                MakeBoardGroup(this);
+            }
 
-            return 0;
+            double totalScore = 0;
+            for(int humanIndex = 0; humanIndex < Humans.Length; ++humanIndex)
+            {
+                var human = Humans[humanIndex];
+                var humanPosIndex = Board.GetBoardIndex(human.Pos);
+                var humanGroup = BoardGroup.FindRoot(humanPosIndex);
+
+                var petNum = 0; // ｈumanのエリアに何匹Petがいるか？
+                for (int petIndex = 0; petIndex < Pets.Length; ++petIndex)
+                {
+                    var pet = Pets[petIndex];
+                    var petPosIndex = Board.GetBoardIndex(pet.Pos);
+                    var petGroup =  BoardGroup.FindRoot(petPosIndex);
+                    if(humanGroup == petGroup)
+                    {
+                        petNum += 1;
+                    }
+                }
+                var groupSize = BoardGroup.FindGroupSize(humanGroup);
+                var score = groupSize*Math.Pow(2, -petNum);
+                totalScore += score;
+            }
+            var coef = 100000000;
+            totalScore = coef*totalScore/900/Humans.Length;
+            return (int)Math.Floor(totalScore);
+        }
+
+        /// <summary>
+        /// Humanのいるエリアでペットのますが１であることはありえないから、
+        /// もし、ペットのユニオンサイズが１ならそこに人はいない。
+        /// </summary>
+        /// <param name="scene"></param>
+        public static void MakeBoardGroup(Scene scene)
+        {
+            var board = scene.Board;
+            var boardGroup = new UnionFindTreeWithUnionSize(board.Height*board.Width);
+            for(int humanIndex = 0; humanIndex < scene.Humans.Length; ++humanIndex)
+            {
+                var initHumanPos = scene.Humans[humanIndex].Pos;                
+                // BFS
+                var queue = new Queue<Pos>();
+                queue.Enqueue(initHumanPos);
+                while(queue.Count > 0)
+                {
+                    var currentPos = queue.Dequeue();
+                    var currentPosIndex = board.GetBoardIndex(currentPos);
+                    foreach(Direction direcion in Enum.GetValues(typeof(Direction))){
+                        var targetPos = MovingObject.Shift(currentPos, direcion);
+                        if( MovingObject.CheckMovable(targetPos, board)){
+                            queue.Enqueue(targetPos);
+                            boardGroup.Unite(currentPosIndex, board.GetBoardIndex(targetPos));
+                        }
+                    }        
+                }
+            }
+        }
+
+
+    }
+
+    public class UnionFindTreeWithUnionSize : UnionFindTree
+    {
+        int[] _unionSize;
+        public UnionFindTreeWithUnionSize(int treeSize) : base (treeSize)
+        {
+            _unionSize = new int[treeSize];
+            for (int index = 0; index < treeSize ; ++index)
+            {
+                _unionSize[index] = 1;
+            }
+        }
+
+        public override void Unite(int x, int y)
+        {
+            x = FindRoot(x);
+            y = FindRoot(y);
+
+            if(x == y){return;}
+
+            var newUnionSize =  _unionSize[x] + _unionSize[y];
+
+            if(_rank[x] < _rank[y])
+            {
+                _parent[x] = y;
+
+            }
+            else
+            {
+                _parent[y] = x;
+                if(_rank[x] == _rank[y])
+                {
+                    _rank[x]++;
+                }
+            }
+            _unionSize[FindRoot(x)] = newUnionSize;
+        }
+        
+        public int FindGroupSize(int searchIndex)
+        {
+            var root = FindRoot(searchIndex);
+            return _unionSize[root];
         }
     }
 
@@ -382,6 +487,22 @@ namespace AtCoder.AHC008
             set { this._board[pos.X, pos.Y] = value;}			
         }
 
+        public FloorType this[int index]
+        {
+            get {
+                int x = index % Width;
+                int y = (index - x)/Width;
+                return this[x, y];
+            }
+            set {
+                
+                int x = index % Width;
+                int y = (index - x)/Width;
+                this[x, y] = value;
+                
+            }
+        }
+
         public int Width {get{return _size;}}
         public int Height {get{return _size;}}
         public (int, int) Size{get {return (_size, _size);}}
@@ -401,6 +522,11 @@ namespace AtCoder.AHC008
                 this[w, lastHeightIndex] = FloorType.Wall;
             }
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetBoardIndex(Pos pos){
+            return Width * pos.Y + pos.X;
+        }
     }
 
 }
@@ -415,9 +541,9 @@ namespace AtCoder
     {
         public int Count { get; private set;}
 
-        private int[] _parent;
+        protected int[] _parent;
 
-        private int[] _rank;
+        protected int[] _rank;
 
         private UnionFindTree(){}
         public UnionFindTree(int treeSize)
@@ -443,7 +569,7 @@ namespace AtCoder
             }
         }
 
-        public void Unite(int x, int y)
+        public virtual void Unite(int x, int y)
         {
             x = FindRoot(x);
             y = FindRoot(y);
