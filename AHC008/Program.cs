@@ -46,46 +46,10 @@ namespace AtCoder.AHC008
                 var initPos = new Pos(initHumansPositions[m].Item1, initHumansPositions[m].Item2);
                 humans[m] = HumanFactory.Create(initPos, initBoard);
             }
-
             WriteLine("#HumansInputDone");
-            var initScene = new Scene()
-            {
-                Turn = 0,
-                Humans = humans,
-                Pets = pets  ,
-                Board = initBoard
-            };
 
-            var territorySimulator = new TerritorySimulator(){
-            };
+            var simulator = new TerritorySimulator(humans, pets, initBoard);
 
-
-            int totalTurnCnt = 300;
-            var currentPetsPositions = new int[numPets];
-            var currentScene = new Scene(initScene);
-            for(int turnCnt = 0; turnCnt < totalTurnCnt ; ++ turnCnt){
-                var outSB = new StringBuilder();                
-                for(int m = 0; m < numHumans; ++m){
-                    var humanAction = ".";
-                    currentScene.Humans[m].Action(humanAction);
-                    outSB.Append(humanAction);
-                } 
-                WriteLine(outSB.ToString());
-            
-                var petActions = cin.ArrayString(numPets);
-                for(int n = 0; n < numPets; ++n)
-                {
-                    currentScene.Pets[n].Action(petActions[n]);
-                }
-                var currentScore = currentScene.CalcTotalScore();
-                WriteLine($"#Turn: {currentScene.Turn}, Score: {currentScore}");
-                if(298 <= currentScene.Turn){
-                    currentScene.Board.Show();
-                }
-                currentScene = new Scene(currentScene);
-                currentScene.Refresh();
-                currentScene.Turn += 1;
-            }
         }
 
         public static void WriteLine(string msg){
@@ -110,6 +74,8 @@ namespace AtCoder.AHC008
         public static Pos operator- (Pos posLeft, Pos posRight){
             return new Pos(posLeft.X-posRight.X, posLeft.Y - posRight.Y);
         }
+
+        public static Pos ErrorPos{get {return new Pos(-100, -100);}}
     }	
 
     public enum PetType{
@@ -143,7 +109,193 @@ namespace AtCoder.AHC008
         public Pet[] Pets {get; set;}
         public static int TotalTurn { get{return 300;}}
 
+        public Scene CurrentScene {get; set;}
+
+        CaptureStrategy Strategy {get; set;}
+
+        public TerritorySimulator(Human[] humans, Pet[] pets, Board initBoard)
+        {
+            Humans = humans;
+            Pets = pets;
+
+            var initScene = new Scene()
+            {
+                Turn = 0,
+                Humans = humans,
+                Pets = pets  ,
+                Board = initBoard
+            };
+
+            Strategy = new CaptureStrategy(){
+                Simulator = this
+            };
+
+            int totalTurnCnt = 300;
+            var currentPetsPositions = new int[pets.Length];
+            CurrentScene = new Scene(initScene);
+            for(int turnCnt = 0; turnCnt < totalTurnCnt ; ++ turnCnt){
+                var movements  = DecideHumansMovement();
+                // SendMovementsOrder
+                Program.WriteLine(movements);
+                // Receive PetsMovements
+                GetPetsMove(CurrentScene);
+
+                var currentScore = CurrentScene.CalcTotalScore();
+                Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
+                if(298 <= CurrentScene.Turn){
+                    CurrentScene.Board.Show();
+                }
+                CurrentScene = new Scene(CurrentScene);
+                CurrentScene.Refresh();
+                CurrentScene.Turn += 1;
+            }
+        }
+
+        public string DecideHumansMovement()
+        {
+            var outSB = new StringBuilder();                
+            for(int m = 0; m < Humans.Length; ++m){
+                var humanAction = ".";
+                CurrentScene.Humans[m].Action(humanAction);
+                outSB.Append(humanAction);
+            } 
+            return outSB.ToString();
+        }
+
+        public void GetPetsMove(in Scene scene)
+        {
+            using var cin = new Scanner();
+            var petActions = cin.ArrayString(Pets.Length);
+            for(int n = 0; n < Pets.Length; ++n)
+            {
+                scene.Pets[n].Action(petActions[n]);
+            }
+        }
+        
+
         public void Simulate(){}
+    }
+
+    public class CaptureStrategy
+    {
+        public TerritorySimulator Simulator {get; set;}
+        /// <summary>
+        /// 現在捕まえたいペット
+        /// </summary>
+        /// <value></value>
+        public int CurrentTargetPet{get; set;}
+
+        /// <summary>
+        /// 残りの捕獲対象
+        /// Petsのインデックスで管理 
+        /// </summary>
+        public List<int> TargetPets {get; set;}
+
+        public delegate int TargetSelectionHandler();
+
+
+        public void ApproachToTarget()
+        {
+            
+        }
+
+        /// <summary>
+        /// 捕獲するための待機場所
+        /// </summary>
+        /// <returns></returns>
+        public Pos GetCapturingPositions()
+        {
+            var targetPetPos = Simulator.Pets[CurrentTargetPet].Pos;
+            var board = Simulator.CurrentScene.Board;
+            for (int index = 0; index < _candidateRelativeVectors.Length; ++index)
+            {
+                var idealWallPos = targetPetPos + _idealWallVectors[index];
+                var constructionSite = board[idealWallPos];
+                var canditateCapturingPosition = targetPetPos + _candidateRelativeVectors[index];
+                if(
+                    constructionSite != FloorType.Wall 
+                    && Human.CheckWallMakable(idealWallPos, board)
+                    && board[canditateCapturingPosition] != FloorType.Wall
+                    && board[canditateCapturingPosition] != FloorType.Human
+                ){
+                    return canditateCapturingPosition;
+                }
+            }
+            return Pos.ErrorPos;
+        }
+
+        /// <summary>
+        /// 理想的な壁建設予定地のベクトル
+        /// </summary>
+        /// <value></value>
+        static Pos[] _idealWallVectors = new Pos[8]{
+            new Pos(-1, -1),
+            new Pos(-2, 0),
+            new Pos(0, -2),
+            new Pos(-1, 1),
+            new Pos(1, -1),
+            new Pos(0, 2),
+            new Pos(2, 0),
+            new Pos(1, 1),
+        };
+
+        /// <summary>
+        /// 壁建設予定地に壁を建設するのに理想的なPos。
+        /// Indexは_idealWallVectorsに対応
+        /// </summary>
+        /// <value></value>
+        static Pos[] _candidateRelativeVectors = new Pos[8]{
+            new Pos(-2, -1),
+            new Pos(-2, 1),
+            new Pos(-1, -2),
+            new Pos(-1, 2),
+            new Pos(1, -2),
+            new Pos(1, 2),
+            new Pos(2, -1),
+            new Pos(2, 1),
+        };
+
+        /// <summary>
+        /// 見つからない場合は-1
+        /// </summary>
+        /// <returns></returns>
+        public int SelectNextTarget()
+        {
+            return SelectNextTarget(this.SelectTargetByNearestManhattan);
+        }
+
+        public int SelectNextTarget(TargetSelectionHandler targetSelectionHandler)
+        {
+            return targetSelectionHandler();
+        }
+
+
+        public int SelectTargetByNearestManhattan()
+        {
+            var humansCog = CalcCoG(Simulator.Humans);
+            int nearestIndex = -1;
+            int nearestDist = 100;
+            for (int index = 0; index < TargetPets.Count; ++index)
+            {
+                var currentDist = Board.CalcManhattanDistance(humansCog, Simulator.Pets[TargetPets[index]].Pos);
+                if(currentDist < nearestDist)
+                {
+                    nearestIndex = index;
+                }
+            }
+            return nearestIndex;
+        }
+
+        public static Pos CalcCoG(IMovingObject[] movingObjects)
+        {
+            Pos sumPos = new Pos(0,0);
+            for(int index = 0; index < movingObjects.Length; ++index)
+            {
+                sumPos += movingObjects[index].Pos;
+            }
+            var cogPos = new Pos(sumPos.X/movingObjects.Length, sumPos.Y/movingObjects.Length);
+            return cogPos;
+        }
     }
 
     public class Scene{
@@ -454,7 +606,7 @@ namespace AtCoder.AHC008
             return isWallMakable;
         }
 
-        bool CheckWallMakable(Pos constructionSite, Board board)
+        public static bool CheckWallMakable(Pos constructionSite, Board board)
         {
             foreach(Direction direction in Enum.GetValues(typeof(Direction))){
                 try{
@@ -723,6 +875,13 @@ namespace AtCoder.AHC008
                 }
                 Program.WriteLine(lineBoardSB.ToString());
             }
+        }
+
+        public static int CalcManhattanDistance(Pos pos1, Pos pos2)
+        {
+            int distX = Math.Abs(pos2.X-pos1.X);
+            int distY = Math.Abs(pos2.Y-pos1.Y);
+            return distX+distY;
         }
     }
 
