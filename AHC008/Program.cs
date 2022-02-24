@@ -49,7 +49,7 @@ namespace AtCoder.AHC008
             WriteLine("#HumansInputDone");
 
             var simulator = new TerritorySimulator(humans, pets, initBoard);
-
+            simulator.Simulate();
         }
 
         public static void WriteLine(string msg){
@@ -73,6 +73,14 @@ namespace AtCoder.AHC008
 
         public static Pos operator- (Pos posLeft, Pos posRight){
             return new Pos(posLeft.X-posRight.X, posLeft.Y - posRight.Y);
+        }
+
+        
+        public static bool operator== (Pos posLeft, Pos posRight){
+            return posLeft.X == posRight.X && (posLeft.Y == posRight.Y);
+        }
+        public static bool operator!= (Pos posLeft, Pos posRight){
+            return !(posLeft == posRight);
         }
 
         public static Pos ErrorPos{get {return new Pos(-100, -100);}}
@@ -130,33 +138,17 @@ namespace AtCoder.AHC008
                 Simulator = this
             };
 
-            int totalTurnCnt = 300;
             var currentPetsPositions = new int[pets.Length];
             CurrentScene = new Scene(initScene);
-            for(int turnCnt = 0; turnCnt < totalTurnCnt ; ++ turnCnt){
-                var movements  = DecideHumansMovement();
-                // SendMovementsOrder
-                Program.WriteLine(movements);
-                // Receive PetsMovements
-                GetPetsMove(CurrentScene);
-
-                var currentScore = CurrentScene.CalcTotalScore();
-                Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
-                if(298 <= CurrentScene.Turn){
-                    CurrentScene.Board.Show();
-                }
-                CurrentScene = new Scene(CurrentScene);
-                CurrentScene.Refresh();
-                CurrentScene.Turn += 1;
-            }
         }
 
         public string DecideHumansMovement()
         {
             var outSB = new StringBuilder();                
             for(int m = 0; m < Humans.Length; ++m){
-                var humanAction = ".";
-                CurrentScene.Humans[m].Action(humanAction);
+                var human = Humans[m];
+                var humanAction = Strategy.DecideNextMove(human, CurrentScene);
+                human.Action(humanAction);
                 outSB.Append(humanAction);
             } 
             return outSB.ToString();
@@ -172,8 +164,24 @@ namespace AtCoder.AHC008
             }
         }
         
+        public void Simulate(){
+            for(int turnCnt = 0; turnCnt < TotalTurn ; ++ turnCnt){
+                var movements  = DecideHumansMovement();
+                // SendMovementsOrder
+                Program.WriteLine(movements);
+                // Receive PetsMovements
+                GetPetsMove(CurrentScene);
 
-        public void Simulate(){}
+                var currentScore = CurrentScene.CalcTotalScore();
+                Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
+                if(8 == CurrentScene.Turn%10){
+                    CurrentScene.Board.Show();
+                }
+                CurrentScene = new Scene(CurrentScene);
+                CurrentScene.Refresh();
+                CurrentScene.Turn += 1;
+            }
+        }
     }
 
     public class CaptureStrategy
@@ -193,10 +201,95 @@ namespace AtCoder.AHC008
 
         public delegate int TargetSelectionHandler();
 
-
-        public void ApproachToTarget()
+        public CaptureStrategy()
         {
-            
+            CurrentTargetPet = -1;
+        }
+
+        public string DecideNextMove(Human human, Scene scene){
+            TargetPets = SearchTargetPets(scene);
+            if(!TargetPets.Contains(CurrentTargetPet))
+            {
+                CurrentTargetPet = SelectNextTarget();
+                if(CurrentTargetPet == -1)
+                {
+                    return "."; // 終了
+                }
+            }
+            var direcion = ApproachToTarget(human, scene);
+            return MovingObject.DirectionToMoveCommandDict[direcion];
+        }
+
+        /// <summary>
+        /// 目標に近づく
+        /// BFSで距離をメモしておけばよい
+        /// 距離が減るほうに進む。
+        /// アプローチ方向を返す
+        /// </summary>
+        public Direction ApproachToTarget(Human human, Scene scene)
+        {
+            // Parentをメモ
+            var distBoard = new (Pos parentPos, int dist, Direction direction)[32,32];
+            var maxDist = 1000;
+            for(int x = 0; x < 32; ++x)
+            {
+                for (int y =0 ; y < 32; ++y)
+                {
+                    distBoard[x, y] = (Pos.ErrorPos, maxDist, Direction.None);
+                }
+            }
+
+            var capturingPos = GetCapturingPositions();
+            // 場所がなければどこにもいかない。
+            if(capturingPos == Pos.ErrorPos)
+            {
+                return Direction.None;
+            }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="parentPos"></param>
+            /// <param name="dist"></param>
+            /// <param name="direction">parentPos から弦座標に行くために必要な方向</param>
+            /// <typeparam name="parentPos"></typeparam>
+            /// <typeparam name="dist"></typeparam>
+            /// <typeparam name="direction"></typeparam>
+            /// <returns></returns>
+            var searchPosQueue = new Queue<(Pos parentPos, int dist)>();
+            distBoard[human.Pos.X, human.Pos.Y] = (human.Pos, 0, Direction.None);
+            searchPosQueue.Enqueue((human.Pos, 0));
+            while(searchPosQueue.Count > 0)
+            {
+                (Pos searchPos, int dist) = searchPosQueue.Dequeue();
+                
+                if(searchPos == capturingPos){
+                    break;
+                }
+
+                foreach(Direction direction in Enum.GetValues(typeof(Direction))){
+                    var nextPos = MovingObject.Shift(searchPos, direction);
+
+                    // 一度訪れたことのあるマスのErrorPosではない。
+                    if(
+                        ( MovingObject.CheckMovable(nextPos, scene.Board)) 
+                        && (distBoard[nextPos.X, nextPos.Y].parentPos == Pos.ErrorPos))
+                    {
+                        var nextDist = dist + 1;
+                        distBoard[nextPos.X, nextPos.Y] = (searchPos, nextDist, direction);
+                        searchPosQueue.Enqueue((nextPos, nextDist));
+                    }
+                }  
+            }
+            // Program.WriteLine("#ApproachToTarget: SearchDone");
+            var currentPos = distBoard[capturingPos.X, capturingPos.Y];
+            while(1 < currentPos.dist)
+            {
+                var parentPos = currentPos.parentPos;
+                //Program.WriteLine($"#ParentPos: ({parentPos.X}, {parentPos.Y}), dist: {currentPos.dist}");
+                currentPos = distBoard[parentPos.X, parentPos.Y];
+            }
+            return currentPos.direction;
         }
 
         /// <summary>
@@ -296,6 +389,54 @@ namespace AtCoder.AHC008
             var cogPos = new Pos(sumPos.X/movingObjects.Length, sumPos.Y/movingObjects.Length);
             return cogPos;
         }
+
+        /// <summary>
+        /// 残りの捕獲対象を創作
+        /// </summary>
+        /// <param name="scene"></param>
+        /// <returns></returns>
+        public static List<int> SearchTargetPets(Scene scene)
+        {
+            var targetPetsSet = new HashSet<int>();
+
+            UnionFindTreeWithUnionSize boardGroup = Scene.MakeBoardGroup(scene);
+            var board = scene.Board;
+
+            // そのグループに属していたら何点か？
+            // ここ高速化できる。
+            var groupScores = new double[board.Width*board.Height];
+
+            for(int humanIndex = 0; humanIndex < scene.Humans.Length; ++humanIndex)
+            {
+                var human = scene.Humans[humanIndex];
+                var humanPosIndex = board.GetBoardIndex(human.Pos);
+                var humanGroup = boardGroup.FindRoot(humanPosIndex);
+
+                // すでに探索ずみの場合はメモしておいたスコアを使う。
+                // スコアは必ず0より大きい
+                if(0 < groupScores[boardGroup.FindRoot(humanPosIndex)])
+                {
+                    continue;
+                }
+
+                var currentPetsSet = new HashSet<int>();
+                for (int petIndex = 0; petIndex < scene.Pets.Length; ++petIndex)
+                {
+                    var pet = scene.Pets[petIndex];
+                    var petPosIndex = board.GetBoardIndex(pet.Pos);
+                    var petGroup =  boardGroup.FindRoot(petPosIndex);
+                    if(humanGroup == petGroup)
+                    {
+                        currentPetsSet.Add(petIndex);
+                    }
+                }
+                var score = 1;
+                groupScores[boardGroup.FindRoot(humanPosIndex)] = score;
+
+                targetPetsSet.UnionWith(currentPetsSet);
+            }
+            return targetPetsSet.ToList();
+        }
     }
 
     public class Scene{
@@ -329,6 +470,9 @@ namespace AtCoder.AHC008
             ).ToArray();
         }
 
+        /// <summary>
+        /// Refresh Scene Board
+        /// </summary>
         public void Refresh()
         {
             Board = new Board();
@@ -536,6 +680,16 @@ namespace AtCoder.AHC008
             return isMovable;
         }
 
+        public static Dictionary<Direction, string> DirectionToMoveCommandDict {
+            get {return _directionToCommandDict;}
+        }
+        static Dictionary<Direction, string> _directionToCommandDict = new Dictionary<Direction, string>{
+            {Direction.None, "."},
+            {Direction.Up, "U"},
+            {Direction.Down, "D"},
+            {Direction.Left, "L"},
+            {Direction.Right, "R"},
+        };
     }
 
     public static class HumanFactory
