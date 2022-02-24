@@ -113,8 +113,8 @@ namespace AtCoder.AHC008
 
     public class TerritorySimulator{
 
-        public Human[] Humans { get; set;} 
-        public Pet[] Pets {get; set;}
+        // public Human[] Humans { get; set;} 
+        // public Pet[] Pets {get; set;}
         public static int TotalTurn { get{return 300;}}
 
         public Scene CurrentScene {get; set;}
@@ -123,8 +123,8 @@ namespace AtCoder.AHC008
 
         public TerritorySimulator(Human[] humans, Pet[] pets, Board initBoard)
         {
-            Humans = humans;
-            Pets = pets;
+            // Humans = humans;
+            // Pets = pets;
 
             var initScene = new Scene()
             {
@@ -145,8 +145,8 @@ namespace AtCoder.AHC008
         public string DecideHumansMovement()
         {
             var outSB = new StringBuilder();                
-            for(int m = 0; m < Humans.Length; ++m){
-                var human = Humans[m];
+            for(int m = 0; m < CurrentScene.Humans.Length; ++m){
+                var human = CurrentScene.Humans[m];
                 var humanAction = Strategy.DecideNextMove(human, CurrentScene);
                 human.Action(humanAction);
                 outSB.Append(humanAction);
@@ -157,8 +157,8 @@ namespace AtCoder.AHC008
         public void GetPetsMove(in Scene scene)
         {
             using var cin = new Scanner();
-            var petActions = cin.ArrayString(Pets.Length);
-            for(int n = 0; n < Pets.Length; ++n)
+            var petActions = cin.ArrayString(scene.Pets.Length);
+            for(int n = 0; n < scene.Pets.Length; ++n)
             {
                 scene.Pets[n].Action(petActions[n]);
             }
@@ -174,11 +174,12 @@ namespace AtCoder.AHC008
 
                 var currentScore = CurrentScene.CalcTotalScore();
                 Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
+                CurrentScene = new Scene(CurrentScene);
+                
+                CurrentScene.Refresh();
                 if(8 == CurrentScene.Turn%10){
                     CurrentScene.Board.Show();
                 }
-                CurrentScene = new Scene(CurrentScene);
-                CurrentScene.Refresh();
                 CurrentScene.Turn += 1;
             }
         }
@@ -298,7 +299,7 @@ namespace AtCoder.AHC008
         /// <returns></returns>
         public Pos GetCapturingPositions()
         {
-            var targetPetPos = Simulator.Pets[CurrentTargetPet].Pos;
+            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
             var board = Simulator.CurrentScene.Board;
             for (int index = 0; index < _candidateRelativeVectors.Length; ++index)
             {
@@ -365,12 +366,12 @@ namespace AtCoder.AHC008
 
         public int SelectTargetByNearestManhattan()
         {
-            var humansCog = CalcCoG(Simulator.Humans);
+            var humansCog = CalcCoG(Simulator.CurrentScene.Humans);
             int nearestIndex = -1;
             int nearestDist = 100;
             for (int index = 0; index < TargetPets.Count; ++index)
             {
-                var currentDist = Board.CalcManhattanDistance(humansCog, Simulator.Pets[TargetPets[index]].Pos);
+                var currentDist = Board.CalcManhattanDistance(humansCog, Simulator.CurrentScene.Pets[TargetPets[index]].Pos);
                 if(currentDist < nearestDist)
                 {
                     nearestIndex = index;
@@ -475,12 +476,19 @@ namespace AtCoder.AHC008
         /// </summary>
         public void Refresh()
         {
-            Board = new Board();
+            int boardSize = Board.Width * Board.Height;
+            for (int index =  0; index < boardSize; ++index)
+            {
+                if(Board[index] != FloorType.Wall){
+                    Board[index] = FloorType.None;
+                }
+            }
             for (int m = 0; m < Humans.Length; ++m)
             {
                 var human = Humans[m];
                 Board[human.Pos] = FloorType.Human;
             }
+            Program.WriteLine($"#Human[0] Pos: ({Humans[0].Pos.X},{Humans[0].Pos.Y})");
             for (int n = 0; n < Pets.Length; ++n)
             {
                 var pet = Pets[n];
