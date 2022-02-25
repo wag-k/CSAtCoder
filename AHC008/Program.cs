@@ -151,6 +151,7 @@ namespace AtCoder.AHC008
                 var humanAction = Strategy.DecideNextAction(human, CurrentScene);
                 human.Action(humanAction);
                 outSB.Append(humanAction);
+                
             } 
             return outSB.ToString();
         }
@@ -173,8 +174,8 @@ namespace AtCoder.AHC008
                 // Receive PetsMovements
                 GetPetsMove(CurrentScene);
 
-                var currentScore = CurrentScene.CalcTotalScore();
-                Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
+                //var currentScore = CurrentScene.CalcTotalScore();
+                //Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
                 CurrentScene = new Scene(CurrentScene);
                 
                 CurrentScene.Refresh();
@@ -212,6 +213,8 @@ namespace AtCoder.AHC008
             TargetPets = SearchTargetPets(scene);
             if(!TargetPets.Contains(CurrentTargetPet))
             {
+                Program.WriteLine("#SearchNextPets: Begin");
+
                 CurrentTargetPet = SelectNextTarget();
                 if(CurrentTargetPet == -1)
                 {
@@ -220,7 +223,7 @@ namespace AtCoder.AHC008
             }
             (var direcion, var dist) = ApproachToTarget(human, scene);
 
-            if(dist <= 2){
+            if(2 <= dist && dist <= 3){
                 return DecideMakeWall(human, scene);
             }else {
                 return MovingObject.DirectionToMoveCommandDict[direcion];
@@ -355,6 +358,8 @@ namespace AtCoder.AHC008
         public Pos GetCapturingPositions()
         {
             var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
+            Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
+
             var board = Simulator.CurrentScene.Board;
             for (int index = 0; index < _candidateRelativeVectors.Length; ++index)
             {
@@ -461,8 +466,7 @@ namespace AtCoder.AHC008
             UnionFindTreeWithUnionSize boardGroup = Scene.MakeBoardGroup(scene);
             var board = scene.Board;
 
-            // そのグループに属していたら何点か？
-            // ここ高速化できる。
+            // そのペットは人間の居場所に存在するか？
             var groupScores = new double[board.Width*board.Height];
 
             for(int humanIndex = 0; humanIndex < scene.Humans.Length; ++humanIndex)
@@ -494,7 +498,9 @@ namespace AtCoder.AHC008
 
                 targetPetsSet.UnionWith(currentPetsSet);
             }
-            return targetPetsSet.ToList();
+            var targetPetsList = targetPetsSet.ToList();
+            targetPetsList.Sort();
+            return targetPetsList;
         }
     }
 
@@ -724,7 +730,7 @@ namespace AtCoder.AHC008
 
         
         public static bool CheckMovable(Pos pos, Board board){
-            if((pos.X < 0) || (pos.Y < 0) || (board.Width <= pos.X) || (board.Height <= pos.Y))
+            if((pos.X < 1) || (pos.Y < 1) || (board.Width-1 <= pos.X) || (board.Height-1 <= pos.Y))
             {
                 return false;
             }
