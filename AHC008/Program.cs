@@ -141,7 +141,28 @@ namespace AtCoder.AHC008
             var currentPetsPositions = new int[pets.Length];
             CurrentScene = new Scene(initScene);
         }
+        
+        public void Simulate(){
+            for(int turnCnt = 0; turnCnt < TotalTurn ; ++ turnCnt){
+                var movements  = DecideHumansMovement();
+                // SendMovementsOrder
+                Program.WriteLine(movements);
+                // Receive PetsMovements
+                GetPetsMove(CurrentScene);
 
+                //var currentScore = CurrentScene.CalcTotalScore();
+                Program.WriteLine($"#Turn: {CurrentScene.Turn}");
+                // Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
+                CurrentScene = new Scene(CurrentScene);
+                
+                CurrentScene.Refresh();
+                if(8 == CurrentScene.Turn%10){
+                    //CurrentScene.Board.Show();
+                }
+                CurrentScene.Turn += 1;
+            }
+        }
+        
         public string DecideHumansMovement()
         {
             var outSB = new StringBuilder();                
@@ -152,6 +173,7 @@ namespace AtCoder.AHC008
                 human.Action(humanAction);
                 outSB.Append(humanAction);
                 
+                // CurrentScene.Board.Show();
             } 
             return outSB.ToString();
         }
@@ -163,26 +185,6 @@ namespace AtCoder.AHC008
             for(int n = 0; n < scene.Pets.Length; ++n)
             {
                 scene.Pets[n].Action(petActions[n]);
-            }
-        }
-        
-        public void Simulate(){
-            for(int turnCnt = 0; turnCnt < TotalTurn ; ++ turnCnt){
-                var movements  = DecideHumansMovement();
-                // SendMovementsOrder
-                Program.WriteLine(movements);
-                // Receive PetsMovements
-                GetPetsMove(CurrentScene);
-
-                //var currentScore = CurrentScene.CalcTotalScore();
-                //Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
-                CurrentScene = new Scene(CurrentScene);
-                
-                CurrentScene.Refresh();
-                if(8 == CurrentScene.Turn%10){
-                    CurrentScene.Board.Show();
-                }
-                CurrentScene.Turn += 1;
             }
         }
     }
@@ -698,6 +700,7 @@ namespace AtCoder.AHC008
     }
 
     public interface IMovingObject{
+        FloorType FloorType{get;}
         Pos Pos{get; set;}
         Board Board {get; set;}
         IEnumerable<Pos> GetMovableArea();
@@ -749,6 +752,10 @@ namespace AtCoder.AHC008
             if(isMovable){
                 movingObject.Pos = nextPos;
             }
+            if(movingObject.Board[nextPos] != FloorType.Pet)
+            {
+                movingObject.Board[nextPos] = movingObject.FloorType;
+            }
             return isMovable;
         }
 
@@ -788,6 +795,7 @@ namespace AtCoder.AHC008
     }
 
     public class Human : IMovingObject{
+        public  FloorType FloorType{get => FloorType.Human;}
         public Pos Pos{get; set;}
         public Board Board{get; set; }
         public IEnumerable<Pos> GetMovableArea(){
@@ -924,6 +932,8 @@ namespace AtCoder.AHC008
     }
 
     public abstract class Pet : IMovingObject{
+        public  FloorType FloorType{get => FloorType.Pet;}
+
 
         public Pos Pos{get; set;}
         public Board Board{get; set; }
