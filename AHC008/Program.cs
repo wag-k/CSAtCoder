@@ -34,6 +34,7 @@ namespace AtCoder.AHC008
                 var initPos = new Pos(initPetsPositions[n].Item1, initPetsPositions[n].Item2);
                 pets[n] = PetFactory.Create((PetType)initPetsPositions[n].Item3, initPos, initBoard);
             }
+            PetFactory.ResetPetIndex();
 
             //Console.WriteLine("#PetsInputDone");
             var numHumans = cin.Int();
@@ -46,6 +47,8 @@ namespace AtCoder.AHC008
                 var initPos = new Pos(initHumansPositions[m].Item1, initHumansPositions[m].Item2);
                 humans[m] = HumanFactory.Create(initPos, initBoard);
             }
+            HumanFactory.ResetHumanIndex();
+
             WriteLine("#HumansInputDone");
 
             var simulator = new TerritorySimulator(humans, pets, initBoard);
@@ -134,16 +137,19 @@ namespace AtCoder.AHC008
                 Board = initBoard
             };
 
-            Strategy = new CaptureStrategy(){
-                Simulator = this
-            };
 
             var currentPetsPositions = new int[pets.Length];
             CurrentScene = new Scene(initScene);
+
+            // Sceneを作ってからじゃないとNREする
+            Strategy = new CaptureStrategy(this);
+
         }
         
         public void Simulate(){
             for(int turnCnt = 0; turnCnt < TotalTurn ; ++ turnCnt){
+                Program.WriteLine($"# IsCurrentSceneNull: {CurrentScene == null}");
+                Strategy.SetCurrentTurn(turnCnt, CurrentScene);
                 var movements  = DecideHumansMovement();
                 // SendMovementsOrder
                 Program.WriteLine(movements);
@@ -151,14 +157,16 @@ namespace AtCoder.AHC008
                 GetPetsMove(CurrentScene);
 
                 //var currentScore = CurrentScene.CalcTotalScore();
-                Program.WriteLine($"#Turn: {CurrentScene.Turn}");
+                //Program.WriteLine($"#Turn: {CurrentScene.Turn}");
                 // Program.WriteLine($"#Turn: {CurrentScene.Turn}, Score: {currentScore}");
-                CurrentScene = new Scene(CurrentScene);
+                // CurrentScene = new Scene(CurrentScene);
                 
                 CurrentScene.Refresh();
+                /*
                 if(8 == CurrentScene.Turn%10){
-                    //CurrentScene.Board.Show();
+                    CurrentScene.Board.Show();
                 }
+                */
                 CurrentScene.Turn += 1;
             }
         }
@@ -204,15 +212,46 @@ namespace AtCoder.AHC008
         /// </summary>
         public List<int> TargetPets {get; set;}
 
+        public int CurrenteTurn {
+            get => _currentTurn;
+            private set {
+                this._currentTurn = value;
+            }
+        }
+        int _currentTurn;
+
+        /// <summary>
+        /// 人間がどこに向かっているか
+        /// </summary>
+        /// <value></value>
+        Pos[] CapturingPositions{ get; set;}
+
+        public void SetCurrentTurn(int turn, Scene scene)
+        {
+            CurrenteTurn =turn;
+            TargetPets = SearchTargetPets(scene);
+        }
+
         public delegate int TargetSelectionHandler();
 
         public CaptureStrategy()
         {
             CurrentTargetPet = -1;
+            CapturingPositions = new Pos[100];
+        }
+        public CaptureStrategy(TerritorySimulator simulator)
+        {
+            CurrentTargetPet = -1;
+            CapturingPositions = (
+                from index in Enumerable.Range(0,  simulator.CurrentScene.Humans.Length)
+                select Pos.ErrorPos
+            ).ToArray();
+            Program.WriteLine($"# CapturingPositions.Length: {CapturingPositions.Length}");
+            
+            Simulator = simulator;
         }
 
         public string DecideNextAction(Human human, Scene scene){
-            TargetPets = SearchTargetPets(scene);
             if(!TargetPets.Contains(CurrentTargetPet))
             {
                 Program.WriteLine("#SearchNextPets: Begin");
@@ -225,9 +264,15 @@ namespace AtCoder.AHC008
             }
             (var direcion, var dist) = ApproachToTarget(human, scene);
 
-            if(2 <= dist && dist <= 3){
+            if(2 <= dist && dist <= 4){
                 return DecideMakeWall(human, scene);
-            }else {
+            }
+            if(dist == 1)
+            {
+                var leaveDirection = LeaveFromConstructionSite(human, scene);
+                return MovingObject.DirectionToMoveCommandDict[direcion];
+            }
+            else {
                 return MovingObject.DirectionToMoveCommandDict[direcion];
             }
         }
@@ -253,14 +298,17 @@ namespace AtCoder.AHC008
             }
 
             var capturingPos = GetCapturingPositions();
-            // Program.WriteLine($"#humanPos: ({human.Pos.X}, {human.Pos.Y}), capturingPos: ({capturingPos.X}, {capturingPos.Y})");
+            // var capturingPos = GetCapturingPositionsToConstructionSite();
+            Program.WriteLine($"# HumanNo: {human.Index} humanPos: ({human.Pos.X}, {human.Pos.Y}), capturingPos: ({capturingPos.X}, {capturingPos.Y})");
+            CapturingPositions[human.Index] = capturingPos;
             // 場所がなければどこにもいかない。
             if(capturingPos == Pos.ErrorPos)
             {
                 return (Direction.None, maxDist);
             } 
             else if(human.Pos == capturingPos){
-                return (Direction.None, 0);
+                // 建設予定地にいたら逃げる。
+                return (LeaveFromConstructionSite(human, scene), 0);
             }
 
             /// <summary>
@@ -284,8 +332,9 @@ namespace AtCoder.AHC008
                 if(searchPos == capturingPos){
                     break;
                 }
-
-                foreach(Direction direction in Enum.GetValues(typeof(Direction))){
+                for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
+                {
+                    var direction = MovingObject.Directions[directionIndex];
                     var nextPos = MovingObject.Shift(searchPos, direction);
 
                     // 一度訪れたことのあるマスのErrorPosではない。
@@ -315,6 +364,69 @@ namespace AtCoder.AHC008
             return (currentPos.direction, distToCapturingPos);
         }
 
+        public Direction LeaveFromConstructionSite(Human human, Scene scene){
+            var petToHumanVec = human.Pos - scene.Pets[CurrentTargetPet].Pos;
+            bool isCheckX = false;
+            if(petToHumanVec.X > 0)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Right), scene.Board))
+                {
+                    return Direction.Right;
+                }
+                isCheckX = true;
+            } else if(petToHumanVec.X < 0)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Left), scene.Board))
+                {
+                    return Direction.Left;
+                }
+                isCheckX = true;
+            }
+
+            
+            bool isCheckY = false;
+            if(petToHumanVec.Y > 0)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Down), scene.Board))
+                {
+                    return Direction.Down;
+                }
+                isCheckY = true;
+            } else if(petToHumanVec.Y < 0)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Up), scene.Board))
+                {
+                    return Direction.Up;
+                }
+                isCheckY = true;
+            }
+
+            if(!isCheckX)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Down), scene.Board))
+                {
+                    return Direction.Down;
+                }
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Up), scene.Board))
+                {
+                    return Direction.Up;
+                }
+            }
+
+            if(!isCheckY)
+            {
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Right), scene.Board))
+                {
+                    return Direction.Right;
+                }
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, Direction.Left), scene.Board))
+                {
+                    return Direction.Left;
+                }
+            }
+
+            return Direction.None;
+        }
 
         public string DecideMakeWall(Human human, Scene scene)
         {
@@ -322,9 +434,10 @@ namespace AtCoder.AHC008
             
             var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
             var board = scene.Board;
-            
-            foreach(Direction direction in Enum.GetValues(typeof(Direction)))
+            for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
+
             {
+                var direction = MovingObject.Directions[directionIndex];
                 if(direction == Direction.None)
                 {
                     continue;
@@ -355,14 +468,17 @@ namespace AtCoder.AHC008
 
         /// <summary>
         /// 捕獲するための待機場所
+        /// 重複しないようにする。
+        /// 候補地がほかになければ重複OK
         /// </summary>
-        /// <returns></returns>
+        /// <returns>capturingPos</returns>
         public Pos GetCapturingPositions()
         {
             var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
-            Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
+            // Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
 
             var board = Simulator.CurrentScene.Board;
+            var capturingPos = Pos.ErrorPos;
             for (int index = 0; index < _candidateRelativeVectors.Length; ++index)
             {
                 var idealWallPos = targetPetPos + _idealWallVectors[index];
@@ -377,12 +493,50 @@ namespace AtCoder.AHC008
                     && board[canditateCapturingPosition] != FloorType.Wall
                     && board[canditateCapturingPosition] != FloorType.Human
                 ){
-                    return canditateCapturingPosition;
+                    capturingPos = canditateCapturingPosition;
+                    if(!CapturingPositions.Contains(capturingPos))
+                    {
+                        return capturingPos;
+                    }
                 }
             }
-            return Pos.ErrorPos;
+            return capturingPos;
         }
 
+        /// <summary>
+        /// 捕獲するための待機場所
+        /// 壁建設地の隣ではなく、建設予定地そのものに向かう
+        /// 重複しないようにする。
+        /// 候補地がほかになければ重複OK
+        /// </summary>
+        /// <returns>capturingPos</returns>
+        public Pos GetCapturingPositionsToConstructionSite()
+        {
+            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
+            // Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
+
+            var board = Simulator.CurrentScene.Board;
+            var capturingPos = Pos.ErrorPos;
+            for (int index = 0; index < _candidateRelativeVectors.Length; ++index)
+            {
+                var idealWallPos = targetPetPos + _idealWallVectors[index];
+                if(!Board.IsInsideOfBoard(idealWallPos)) {
+                    continue;
+                }
+                var constructionSiteFloorType = board[idealWallPos];
+                if(
+                    constructionSiteFloorType != FloorType.Wall 
+                    && Human.CheckWallMakable(idealWallPos, board)
+                ){
+                    capturingPos = idealWallPos;
+                    if(!CapturingPositions.Contains(capturingPos))
+                    {
+                        return capturingPos;
+                    }
+                }
+            }
+            return capturingPos;
+        }
         /// <summary>
         /// 理想的な壁建設予定地のベクトル
         /// </summary>
@@ -431,6 +585,10 @@ namespace AtCoder.AHC008
 
         public int SelectTargetByNearestManhattan()
         {
+            // Program.WriteLine($"# IsSimulatorNull: {Simulator == null}");
+            // Program.WriteLine($"# IsSimulator.CurrentSceneNull: {Simulator.CurrentScene == null}");
+            // Program.WriteLine($"# IsSimulator.CurrentScene.HumansNull: {Simulator.CurrentScene.Humans == null}");
+
             var humansCog = CalcCoG(Simulator.CurrentScene.Humans);
             int nearestIndex = -1;
             int nearestDist = 100;
@@ -530,11 +688,13 @@ namespace AtCoder.AHC008
                 from human in originalScene.Humans
                 select HumanFactory.Create(human.Pos, Board)
             ).ToArray();
+            HumanFactory.ResetHumanIndex();
             Pets = 
             (
                 from pet in originalScene.Pets
                 select PetFactory.Create(pet.PetType, pet.Pos, Board)
             ).ToArray();
+            PetFactory.ResetPetIndex();
         }
 
         /// <summary>
@@ -636,8 +796,10 @@ namespace AtCoder.AHC008
                 {
                     var currentPos = queue.Dequeue();
                     var currentPosIndex = board.GetBoardIndex(currentPos);
-                    foreach(Direction direcion in Enum.GetValues(typeof(Direction))){
-                        var targetPos = MovingObject.Shift(currentPos, direcion);
+                    for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex ++)
+                    {
+                        var direction = MovingObject.Directions[directionIndex];
+                        var targetPos = MovingObject.Shift(currentPos, direction);
                         // 一度訪れたことのあるマスのUniteSizeは１よりい大きい
                         if(
                             ( MovingObject.CheckMovable(targetPos, board)) 
@@ -701,6 +863,7 @@ namespace AtCoder.AHC008
 
     public interface IMovingObject{
         FloorType FloorType{get;}
+        int Index { get ; set;}
         Pos Pos{get; set;}
         Board Board {get; set;}
         IEnumerable<Pos> GetMovableArea();
@@ -780,27 +943,52 @@ namespace AtCoder.AHC008
             {Direction.Left, "l"},
             {Direction.Right, "r"},
         };
+
+        public static Direction[] Directions{
+            get => _directions;
+        }
+        static Direction[] _directions = new Direction[5]{
+            Direction.None,
+            Direction.Up,
+            Direction.Down,
+            Direction.Left,
+            Direction.Right,
+        };
     }
 
     public static class HumanFactory
     {
+        static int _humanIndex = 0;
         public static Human Create(Pos pos, Board board)
         {
             board[pos] = FloorType.Human;
-            return new Human(){
+
+            var createdHuman = new Human(){
+                Index = _humanIndex,
                 Pos = pos,
                 Board = board
             };
+            _humanIndex++;
+            Program.WriteLine($"#CreatedHuman: {createdHuman.Index}");
+
+            return createdHuman;
+        }
+
+        public static void ResetHumanIndex()
+        {
+            _humanIndex = 0;
         }
     }
 
     public class Human : IMovingObject{
         public  FloorType FloorType{get => FloorType.Human;}
+        public int Index { get; set;}
         public Pos Pos{get; set;}
         public Board Board{get; set; }
         public IEnumerable<Pos> GetMovableArea(){
-
-            foreach( Direction direction in Enum.GetValues(typeof(Direction))){
+            for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex ++)
+            {
+                var direction = MovingObject.Directions[directionIndex];
                 var checkPos = Pos + MovingObject.GetShiftVector(direction);
                 if(MovingObject.CheckMovable(Pos, Board)){
                     yield return checkPos;
@@ -853,7 +1041,9 @@ namespace AtCoder.AHC008
 
         public static bool CheckWallMakable(Pos constructionSite, Board board)
         {
-            foreach(Direction direction in Enum.GetValues(typeof(Direction))){
+            for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
+            {
+                var direction = MovingObject.Directions[directionIndex];
                 try{
                     var shiftedPos = MovingObject.Shift(constructionSite, direction);
                     var floorType = board[shiftedPos];
@@ -871,8 +1061,9 @@ namespace AtCoder.AHC008
                         if(floorType==FloorType.Human)
                         {
                             int wallNumAroundHuman = 0;
-                            foreach(Direction directionHuman in Enum.GetValues(typeof(Direction)))
+                            for(int directionHumanIndex = 0; directionHumanIndex < MovingObject.Directions.Length; directionHumanIndex++)
                             {
+                                var directionHuman = MovingObject.Directions[directionHumanIndex];
                                 var posAroundHuman = MovingObject.Shift(shiftedPos, directionHuman);
                                 if(board[posAroundHuman] == FloorType.Wall){
                                     wallNumAroundHuman += 1;
@@ -895,39 +1086,57 @@ namespace AtCoder.AHC008
 
     public static class PetFactory
     {
+        static int _petIndex = 0;
         public static Pet Create(PetType petType, Pos pos, Board board)
         {
             board[pos] = FloorType.Pet;
+            Pet createdPet;
             switch (petType)
             {
                 case PetType.Cow:
-                    return new Cow(){
+                    createdPet = new Cow(){
+                        Index = _petIndex,
                         Pos = pos,
                         Board = board
                     };
+                    break;
                 case PetType.Pig:
-                    return new Pig(){
+                    createdPet = new Pig(){
+                        Index = _petIndex,
                         Pos = pos,
                         Board = board
                     };
+                    break;
                 case PetType.Rabbit:
-                    return new Rabbit(){
+                    createdPet = new Rabbit(){
+                        Index = _petIndex,
                         Pos = pos,
                         Board = board
                     };
+                    break;
                 case PetType.Dog:
-                    return new Dog(){
+                    createdPet = new Dog(){
+                        Index = _petIndex,
                         Pos = pos,
                         Board = board
                     };
+                    break;
                 case PetType.Cat:
-                    return new Cat(){
+                    createdPet = new Cat(){
+                        Index = _petIndex,
                         Pos = pos,
                         Board = board
                     };
+                    break;
                 default:
                     throw new ArgumentException("CreateError");
             }
+            _petIndex++;
+            return createdPet;
+        }
+        public static void ResetPetIndex()
+        {
+            _petIndex = 0;
         }
     }
 
@@ -935,6 +1144,7 @@ namespace AtCoder.AHC008
         public  FloorType FloorType{get => FloorType.Pet;}
 
 
+        public int Index { get; set;}
         public Pos Pos{get; set;}
         public Board Board{get; set; }
         public abstract PetType PetType {get;}
@@ -957,8 +1167,10 @@ namespace AtCoder.AHC008
         IEnumerable<Pos> SearchMovablePositions(IEnumerable<Pos> checkPositions){
             foreach (var checkPosition in checkPositions)
             {
-                foreach(Direction direcion in Enum.GetValues(typeof(Direction))){
-                    var targetPos = MovingObject.Shift(checkPosition, direcion);
+                for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
+                {
+                    var direction = MovingObject.Directions[directionIndex];
+                    var targetPos = MovingObject.Shift(checkPosition, direction);
                     if( MovingObject.CheckMovable(targetPos, Board)){
                         yield return targetPos;
                     }
