@@ -684,6 +684,7 @@ namespace AtCoder.AHC008
                 var currentDist = Board.CalcManhattanDistance(humansCog, Simulator.CurrentScene.Pets[TargetPets[index]].Pos);
                 if(currentDist < nearestDist)
                 {
+                    nearestDist = currentDist;
                     nearestIndex = index;
                 }
             }
@@ -737,7 +738,7 @@ namespace AtCoder.AHC008
                     var petGroup =  boardGroup.FindRoot(petPosIndex);
                     if(humanGroup == petGroup)
                     {
-                        currentPetsSet.Add(petIndex);
+                        currentPetsSet.Add(pet.Index);
                     }
                 }
                 var score = 1;
