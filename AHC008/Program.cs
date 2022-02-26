@@ -220,6 +220,9 @@ namespace AtCoder.AHC008
         /// </summary>
         public List<int> TargetPets {get; set;}
 
+        public Scene ClonedCurrentScene { get; set;} 
+        public int ClonedCurrentSceneScore { get; set;} 
+
         public int CurrenteTurn {
             get => _currentTurn;
             private set {
@@ -239,6 +242,7 @@ namespace AtCoder.AHC008
             CurrenteTurn =turn;
             TargetPets = SearchTargetPets(scene);
             CurrentTargetPetIndex = SelectNextTarget();
+            ClonedCurrentScene = new Scene(scene);
         }
 
         public delegate int TargetSelectionHandler();
@@ -271,6 +275,14 @@ namespace AtCoder.AHC008
                     return "."; // 終了
                 }
             }
+
+            // ここで壁を張ってスコアが伸びるならやるべき。
+            double threshold = 1.9;
+            var tryMakingWallDirection = MakeWallSimulate(human, scene, threshold);
+            if(tryMakingWallDirection != Direction.None){
+                return MovingObject.DirectionToMakingWallCommandDict[tryMakingWallDirection];
+            }
+
             (var direcion, var dist) = ApproachToTarget(human, scene);
 
 
@@ -292,6 +304,40 @@ namespace AtCoder.AHC008
             else {
                 return MovingObject.DirectionToMoveCommandDict[direcion];
             }
+        }
+
+
+        /// <summary>
+        /// 壁を張ってみるシミュレーションを実行。
+        /// スコアがthreshold倍以上になるなら壁を張るべき。
+        /// </summary>
+        /// <param name="human"></param>
+        /// <param name="scene"></param>
+        /// <param name="threshold"></param>
+        /// <returns></returns>
+        public Direction MakeWallSimulate(Human human, Scene scene, double threshold)
+        {
+            int thresholdScore = (int)(ClonedCurrentSceneScore*threshold);
+
+            for(int directionIndex = 1; directionIndex < MovingObject.Directions.Length-2; directionIndex++)
+            {
+                var direction = MovingObject.Directions[directionIndex];
+                var virtualScene = new Scene(scene);
+                var resAction = virtualScene.Humans[human.Index].Action(MovingObject.DirectionToMakingWallCommandDict[direction]);
+                if(!resAction)
+                {
+                    continue;
+                }
+                // Petが減ったか？
+                int virtualPetsNum = SearchTargetPets(virtualScene).Count;
+                if(virtualPetsNum < TargetPets.Count)
+                {
+                    Program.WriteLine($"#virtualPetsNum: {virtualPetsNum}, TargetPets.Count: {TargetPets.Count}");
+                    
+                    return direction;
+                }
+            }
+            return Direction.None;
         }
 
         /// <summary>
@@ -981,6 +1027,7 @@ namespace AtCoder.AHC008
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Unite(int x, int y)
         {
             x = FindRoot(x);
@@ -1005,7 +1052,7 @@ namespace AtCoder.AHC008
             }
             _unionSize[FindRoot(x)] = newUnionSize;
         }
-        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int FindGroupSize(int searchIndex)
         {
             var root = FindRoot(searchIndex);
@@ -1023,11 +1070,13 @@ namespace AtCoder.AHC008
 
     }
     public static class MovingObject{
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Pos Shift(Pos pos, Direction direction)
         {
             var shiftVector = GetShiftVector(direction);
             return pos+shiftVector;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Pos GetShiftVector(Direction direction){
             switch (direction)
             {
@@ -1047,6 +1096,7 @@ namespace AtCoder.AHC008
         }
 
         
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool CheckMovable(Pos pos, Board board){
             if((pos.X < 1) || (pos.Y < 1) || (board.Width-1 <= pos.X) || (board.Height-1 <= pos.Y))
             {
@@ -1121,11 +1171,12 @@ namespace AtCoder.AHC008
                 Board = board
             };
             _humanIndex++;
-            Program.WriteLine($"#CreatedHuman: {createdHuman.Index}");
+            // Program.WriteLine($"#CreatedHuman: {createdHuman.Index}");
 
             return createdHuman;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ResetHumanIndex()
         {
             _humanIndex = 0;
@@ -1147,6 +1198,7 @@ namespace AtCoder.AHC008
                 }
             }
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Action(string actionCommand){
             switch (actionCommand)
             {
@@ -1286,6 +1338,7 @@ namespace AtCoder.AHC008
             _petIndex++;
             return createdPet;
         }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ResetPetIndex()
         {
             _petIndex = 0;
@@ -1504,6 +1557,7 @@ namespace AtCoder.AHC008
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int CalcManhattanDistance(Pos pos1, Pos pos2)
         {
             int distX = Math.Abs(pos2.X-pos1.X);
@@ -1511,6 +1565,7 @@ namespace AtCoder.AHC008
             return distX+distY;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInsideOfBoard(Pos pos)
         {
             bool xBoundary = (0 < pos.X) && (pos.X <31);
@@ -1548,6 +1603,7 @@ namespace AtCoder
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int FindRoot(int searchIndex)
         {
             if(_parent[searchIndex] == searchIndex)
@@ -1559,6 +1615,7 @@ namespace AtCoder
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public virtual void Unite(int x, int y)
         {
             x = FindRoot(x);
@@ -1580,6 +1637,7 @@ namespace AtCoder
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsSame(int x, int y)
         {
             return FindRoot(x) == FindRoot(y);
