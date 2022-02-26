@@ -791,8 +791,10 @@ namespace AtCoder.AHC008
             int nearestDist = 100;
             for (int index = 0; index < TargetPets.Count; ++index)
             {
-                var currentDist = Board.CalcManhattanDistance(humansCog, Simulator.CurrentScene.Pets[TargetPets[index]].Pos);
-                if(currentDist < nearestDist)
+                var pet = Simulator.CurrentScene.Pets[TargetPets[index]];
+                var currentDist = Board.CalcManhattanDistance(humansCog, pet.Pos);
+                if(currentDist < nearestDist 
+                    && pet.GetType() != typeof(Rabbit) 
                 {
                     nearestDist = currentDist;
                     nearestIndex = index;
