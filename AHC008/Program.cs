@@ -238,6 +238,7 @@ namespace AtCoder.AHC008
         {
             CurrenteTurn =turn;
             TargetPets = SearchTargetPets(scene);
+            CurrentTargetPetIndex = SelectNextTarget();
         }
 
         public delegate int TargetSelectionHandler();
@@ -264,7 +265,7 @@ namespace AtCoder.AHC008
             {
                 Program.WriteLine("#SearchNextPets: Begin");
 
-                CurrentTargetPetIndex = SelectNextTarget();
+                // CurrentTargetPetIndex = SelectNextTarget();
                 if(CurrentTargetPetIndex == -1)
                 {
                     return "."; // 終了
