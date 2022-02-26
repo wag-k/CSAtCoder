@@ -148,7 +148,7 @@ namespace AtCoder.AHC008
         
         public void Simulate(){
             for(int turnCnt = 0; turnCnt < TotalTurn ; ++ turnCnt){
-                Program.WriteLine($"# IsCurrentSceneNull: {CurrentScene == null}");
+                // Program.WriteLine($"# IsCurrentSceneNull: {CurrentScene == null}");
                 Strategy.SetCurrentTurn(turnCnt, CurrentScene);
                 var movements  = DecideHumansMovement();
                 // SendMovementsOrder
@@ -175,7 +175,7 @@ namespace AtCoder.AHC008
         {
             var outSB = new StringBuilder();                
             for(int m = 0; m < CurrentScene.Humans.Length; ++m){
-                Program.WriteLine($"# Human: {m}");
+                // Program.WriteLine($"# Human: {m}");
                 var human = CurrentScene.Humans[m];
                 var humanAction = Strategy.DecideNextAction(human, CurrentScene);
                 human.Action(humanAction);
@@ -204,7 +204,15 @@ namespace AtCoder.AHC008
         /// 現在捕まえたいペット
         /// </summary>
         /// <value></value>
-        public int CurrentTargetPet{get; set;}
+        public int CurrentTargetPetIndex{get; set;}
+
+        /// <summary>
+        /// 現在捕まえたいペット
+        /// </summary>
+        /// <value></value>
+        public Pet CurrentTargetPet{get => Simulator.CurrentScene.Pets[CurrentTargetPetIndex];}
+
+
 
         /// <summary>
         /// 残りの捕獲対象
@@ -236,12 +244,12 @@ namespace AtCoder.AHC008
 
         public CaptureStrategy()
         {
-            CurrentTargetPet = -1;
+            CurrentTargetPetIndex = -1;
             CapturingPositions = new Pos[100];
         }
         public CaptureStrategy(TerritorySimulator simulator)
         {
-            CurrentTargetPet = -1;
+            CurrentTargetPetIndex = -1;
             CapturingPositions = (
                 from index in Enumerable.Range(0,  simulator.CurrentScene.Humans.Length)
                 select Pos.ErrorPos
@@ -252,26 +260,32 @@ namespace AtCoder.AHC008
         }
 
         public string DecideNextAction(Human human, Scene scene){
-            if(!TargetPets.Contains(CurrentTargetPet))
+            if(!TargetPets.Contains(CurrentTargetPetIndex))
             {
                 Program.WriteLine("#SearchNextPets: Begin");
 
-                CurrentTargetPet = SelectNextTarget();
-                if(CurrentTargetPet == -1)
+                CurrentTargetPetIndex = SelectNextTarget();
+                if(CurrentTargetPetIndex == -1)
                 {
                     return "."; // 終了
                 }
             }
             (var direcion, var dist) = ApproachToTarget(human, scene);
 
-            if(2 <= dist && dist <= 4){
+
+            if(dist == 0){
                 return DecideMakeWall(human, scene);
             }
+            else if(Board.CalcManhattanDistance(CurrentTargetPet.Pos, human.Pos) == 3){
+                return DecideMakeWall(human, scene);
+            }
+            /*
             if(dist == 1)
             {
-                var leaveDirection = LeaveFromConstructionSite(human, scene);
+                var leaveDirection = LeaveFromPet(human, scene);
                 return MovingObject.DirectionToMoveCommandDict[direcion];
             }
+            */
             else {
                 return MovingObject.DirectionToMoveCommandDict[direcion];
             }
@@ -283,6 +297,8 @@ namespace AtCoder.AHC008
         /// 距離が減るほうに進む。
         /// アプローチ方向を返す
         /// 目的地に近づく方向と目的地までの距離を返す。
+        
+        /// distは目的地(理想の壁つくりのための場所)までの距離
         /// </summary> 
         public (Direction direction, int dist) ApproachToTarget(Human human, Scene scene)
         {
@@ -301,15 +317,32 @@ namespace AtCoder.AHC008
             // var capturingPos = GetCapturingPositionsToConstructionSite();
             Program.WriteLine($"# HumanNo: {human.Index} humanPos: ({human.Pos.X}, {human.Pos.Y}), capturingPos: ({capturingPos.X}, {capturingPos.Y})");
             CapturingPositions[human.Index] = capturingPos;
+            
+            var idealWallPositoins = new List<Pos>();
+            for(var wallIndex = 0; wallIndex < _idealWallVectors.Length; ++wallIndex)
+            {
+                var idealWallPos = CurrentTargetPet.Pos + _idealWallVectors[wallIndex];
+                if(!Board.IsInsideOfBoard(idealWallPos)) {
+                    continue;
+                }
+                idealWallPositoins.Add(idealWallPos);
+            }
             // 場所がなければどこにもいかない。
             if(capturingPos == Pos.ErrorPos)
             {
                 return (Direction.None, maxDist);
+            }
+            else if(idealWallPositoins.Contains(human.Pos))
+            {
+                // 建設予定地にいたら逃げる。
+                return (LeaveFromPet(human, scene), 0);
             } 
+            /*
             else if(human.Pos == capturingPos){
                 // 建設予定地にいたら逃げる。
-                return (LeaveFromConstructionSite(human, scene), 0);
+                return (LeaveFromPet(human, scene), 0);
             }
+            */
 
             /// <summary>
             /// 
@@ -332,6 +365,9 @@ namespace AtCoder.AHC008
                 if(searchPos == capturingPos){
                     break;
                 }
+
+                // Queueに入れる順番に優先度をつける。
+                var orderBuffetList = new List<(int sortStandard, (Pos parentPos, int dist) posDist)>();
                 for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
                 {
                     var direction = MovingObject.Directions[directionIndex];
@@ -344,9 +380,28 @@ namespace AtCoder.AHC008
                     {
                         var nextDist = dist + 1;
                         distBoard[nextPos.X, nextPos.Y] = (searchPos, nextDist, direction);
-                        searchPosQueue.Enqueue((nextPos, nextDist));
+                        // ターゲットと調べている地点の2点が作る四角形の面積。これが大きいほうを優先して探索したい
+                        var differencePos = capturingPos - nextPos;
+                        int targetDistSquare = Math.Abs(differencePos.X*differencePos.Y);
+                        orderBuffetList.Add((targetDistSquare, (nextPos, nextDist)));
                     }
+                    ;
+                }
+                if(orderBuffetList.Count == 0){
+                    continue;
+                }
+                // SortしてEnqueue
+                orderBuffetList.Sort((left, right )=>{
+                    return left.sortStandard.CompareTo(right.sortStandard);
+                });
+                orderBuffetList.Reverse();
+                for(int orderIndex = 0 ; orderIndex < orderBuffetList.Count; ++orderIndex)
+                {
+                    // Program.WriteLine($"# square: {orderBuffetList[orderIndex].sortStandard}");
+                    var posDist = orderBuffetList[orderIndex].posDist;
+                    searchPosQueue.Enqueue(posDist);
                 }  
+
             }
             // Program.WriteLine("#ApproachToTarget: SearchDone");
             var currentPos = distBoard[capturingPos.X, capturingPos.Y];
@@ -364,8 +419,10 @@ namespace AtCoder.AHC008
             return (currentPos.direction, distToCapturingPos);
         }
 
-        public Direction LeaveFromConstructionSite(Human human, Scene scene){
-            var petToHumanVec = human.Pos - scene.Pets[CurrentTargetPet].Pos;
+        public Direction LeaveFromPet(Human human, Scene scene){
+            Program.WriteLine($"#LeaveFromPet: human:{human.Index}");
+            
+            var petToHumanVec = human.Pos - scene.Pets[CurrentTargetPetIndex].Pos;
             bool isCheckX = false;
             if(petToHumanVec.X > 0)
             {
@@ -425,6 +482,16 @@ namespace AtCoder.AHC008
                 }
             }
 
+            
+            for(int directionIndex = 1; directionIndex < MovingObject.Directions.Length; directionIndex++)
+            {
+                var direction = MovingObject.Directions[directionIndex];
+                Program.WriteLine($"# Try Lave Direction: {direction}");
+                if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, direction), scene.Board))
+                {
+                    return direction;
+                }
+            }
             return Direction.None;
         }
 
@@ -432,7 +499,7 @@ namespace AtCoder.AHC008
         {
             // Program.WriteLine($"# Decide Make Wall: Begin");
             
-            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
+            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPetIndex].Pos;
             var board = scene.Board;
             for(int directionIndex = 0; directionIndex < MovingObject.Directions.Length; directionIndex++)
 
@@ -474,7 +541,7 @@ namespace AtCoder.AHC008
         /// <returns>capturingPos</returns>
         public Pos GetCapturingPositions()
         {
-            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
+            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPetIndex].Pos;
             // Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
 
             var board = Simulator.CurrentScene.Board;
@@ -512,7 +579,7 @@ namespace AtCoder.AHC008
         /// <returns>capturingPos</returns>
         public Pos GetCapturingPositionsToConstructionSite()
         {
-            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPet].Pos;
+            var targetPetPos = Simulator.CurrentScene.Pets[CurrentTargetPetIndex].Pos;
             // Program.WriteLine($"#TargetPet: {CurrentTargetPet}, Pos: ({targetPetPos.X}, {targetPetPos.Y})");
 
             var board = Simulator.CurrentScene.Board;
@@ -566,6 +633,26 @@ namespace AtCoder.AHC008
             new Pos(1, 2),
             new Pos(2, -1),
             new Pos(2, 1),
+        };
+
+        /// <summary>
+        /// 壁建設予定地に壁を建設可能な相対座標。
+        /// Indexは_idealWallVectorsに対応
+        /// </summary>
+        /// <value></value>
+        static Pos[] _wallMakableRelativeVectors = new Pos[12]{
+            new Pos(-3, 0),
+            new Pos(-2, -1),
+            new Pos(-2, 1),
+            new Pos(-1, -2),
+            new Pos(-1, 2),
+            new Pos(0, -3),
+            new Pos(0, 3),
+            new Pos(1, -2),
+            new Pos(1, 2),
+            new Pos(2, -1),
+            new Pos(2, 1),
+            new Pos(3,0),
         };
 
         /// <summary>
