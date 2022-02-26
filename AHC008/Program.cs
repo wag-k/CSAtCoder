@@ -277,7 +277,9 @@ namespace AtCoder.AHC008
             if(dist == 0){
                 return DecideMakeWall(human, scene);
             }
-            else if(Board.CalcManhattanDistance(CurrentTargetPet.Pos, human.Pos) == 3){
+            var manhattanDistance = Board.CalcManhattanDistance(CurrentTargetPet.Pos, human.Pos);
+            //if(manhattanDistance == 3 || manhattanDistance == 4){
+            if(manhattanDistance == 3){
                 return DecideMakeWall(human, scene);
             }
             /*
@@ -517,11 +519,11 @@ namespace AtCoder.AHC008
                     continue;
                 }
 
-                for (int index = 0; index < _idealWallVectors.Length; ++index)
+                for (int index = 0; index < WallSiteVectors.Length; ++index)
                 {
                     //Program.WriteLine($"# Serch Making Wall Pos. Index: {index}");
 
-                    var idealWallPos = targetPetPos + _idealWallVectors[index];
+                    var idealWallPos = targetPetPos + WallSiteVectors[index];
                     if((constructionSite == idealWallPos)){
                         // Program.WriteLine($"# FoundGoodConstructionSite: ({idealWallPos.X}, {idealWallPos.Y}), Direction: {direction}");
                         return MovingObject.DirectionToMakingWallCommandDict[direction];
@@ -605,6 +607,10 @@ namespace AtCoder.AHC008
             }
             return capturingPos;
         }
+
+        public static Pos[] WallSiteVectors{
+            get => _idealWallVectors;
+        }
         /// <summary>
         /// 理想的な壁建設予定地のベクトル
         /// </summary>
@@ -618,6 +624,33 @@ namespace AtCoder.AHC008
             new Pos(0, 2),
             new Pos(2, 0),
             new Pos(1, 1),
+        };
+
+        /// <summary>
+        /// ２マス先まで許容した壁建設予定地のベクトル
+        /// </summary>
+        /// <value></value>
+        static Pos[] _extendedWallVectors = new Pos[20]{
+            new Pos(-1, -1),
+            new Pos(-2, 0),
+            new Pos(0, -2),
+            new Pos(-1, 1),
+            new Pos(1, -1),
+            new Pos(0, 2),
+            new Pos(2, 0),
+            new Pos(1, 1),
+            new Pos(-3, 0),
+            new Pos(-2, -1),
+            new Pos(-2, 1),
+            new Pos(-1, -2),
+            new Pos(-1, 2),
+            new Pos(0, -3),
+            new Pos(0, 3),
+            new Pos(1, -2),
+            new Pos(1, 2),
+            new Pos(2, -1),
+            new Pos(2, 1),
+            new Pos(3, 0),
         };
 
         /// <summary>
@@ -656,6 +689,36 @@ namespace AtCoder.AHC008
             new Pos(3,0),
         };
 
+        static Pos[] _extendedWallMakableRelativeVectors = new Pos[28]{
+            new Pos(-4, 0),
+            new Pos(-3, -1),
+            new Pos(-3, 0),
+            new Pos(-3, 1),
+            new Pos(-2, -2),
+            new Pos(-2, -1),
+            new Pos(-2, 1),
+            new Pos(-2, 2),
+            new Pos(-1, -3),
+            new Pos(-1, -2),
+            new Pos(-1, 2),
+            new Pos(-1, 3),
+            new Pos(0, -4),
+            new Pos(0, -3),
+            new Pos(0, 3),
+            new Pos(0, 4),
+            new Pos(1, -3),
+            new Pos(1, -2),
+            new Pos(1, 2),
+            new Pos(1, 3),
+            new Pos(2, -2),
+            new Pos(2, -1),
+            new Pos(2, 1),
+            new Pos(2, 2),
+            new Pos(3, -1),
+            new Pos(3, 0),
+            new Pos(3, 1),
+            new Pos(4, 0),
+        };
         /// <summary>
         /// 見つからない場合は-1
         /// </summary>
