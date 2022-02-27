@@ -259,7 +259,7 @@ namespace AtCoder.AHC008
                 from index in Enumerable.Range(0,  simulator.CurrentScene.Humans.Length)
                 select Pos.ErrorPos
             ).ToArray();
-            Program.WriteLine($"# CapturingPositions.Length: {CapturingPositions.Length}");
+            //Program.WriteLine($"# CapturingPositions.Length: {CapturingPositions.Length}");
             
             Simulator = simulator;
         }
@@ -267,7 +267,7 @@ namespace AtCoder.AHC008
         public string DecideNextAction(Human human, Scene scene){
             if(!TargetPets.Contains(CurrentTargetPetIndex))
             {
-                Program.WriteLine("#SearchNextPets: Begin");
+                //Program.WriteLine("#SearchNextPets: Begin");
 
                 // CurrentTargetPetIndex = SelectNextTarget();
                 if(CurrentTargetPetIndex == -1)
@@ -294,6 +294,12 @@ namespace AtCoder.AHC008
             if(manhattanDistance == 3){
                 return DecideMakeWall(human, scene);
             }
+            /*
+            else if(manhattanDistance <= 2){
+                var leaveDirection = LeaveFromPet(human, scene);
+                return MovingObject.DirectionToMoveCommandDict[direcion];
+            }
+            */
             /*
             if(dist == 1)
             {
@@ -332,7 +338,7 @@ namespace AtCoder.AHC008
                 int virtualPetsNum = SearchTargetPets(virtualScene).Count;
                 if(virtualPetsNum < TargetPets.Count)
                 {
-                    Program.WriteLine($"#virtualPetsNum: {virtualPetsNum}, TargetPets.Count: {TargetPets.Count}");
+                    //Program.WriteLine($"#virtualPetsNum: {virtualPetsNum}, TargetPets.Count: {TargetPets.Count}");
                     
                     return direction;
                 }
@@ -364,7 +370,7 @@ namespace AtCoder.AHC008
 
             var capturingPos = GetCapturingPositions();
             // var capturingPos = GetCapturingPositionsToConstructionSite();
-            Program.WriteLine($"# HumanNo: {human.Index} humanPos: ({human.Pos.X}, {human.Pos.Y}), capturingPos: ({capturingPos.X}, {capturingPos.Y})");
+            //Program.WriteLine($"# HumanNo: {human.Index} humanPos: ({human.Pos.X}, {human.Pos.Y}), capturingPos: ({capturingPos.X}, {capturingPos.Y})");
             CapturingPositions[human.Index] = capturingPos;
             
             var idealWallPositoins = new List<Pos>();
@@ -469,7 +475,7 @@ namespace AtCoder.AHC008
         }
 
         public Direction LeaveFromPet(Human human, Scene scene){
-            Program.WriteLine($"#LeaveFromPet: human:{human.Index}");
+            //Program.WriteLine($"#LeaveFromPet: human:{human.Index}");
             
             var petToHumanVec = human.Pos - scene.Pets[CurrentTargetPetIndex].Pos;
             bool isCheckX = false;
@@ -535,7 +541,7 @@ namespace AtCoder.AHC008
             for(int directionIndex = 1; directionIndex < MovingObject.Directions.Length; directionIndex++)
             {
                 var direction = MovingObject.Directions[directionIndex];
-                Program.WriteLine($"# Try Lave Direction: {direction}");
+                //Program.WriteLine($"# Try Lave Direction: {direction}");
                 if(MovingObject.CheckMovable(MovingObject.Shift(human.Pos, direction), scene.Board))
                 {
                     return direction;
@@ -788,16 +794,16 @@ namespace AtCoder.AHC008
 
             var humansCog = CalcCoG(Simulator.CurrentScene.Humans);
             int nearestIndex = -1;
-            int nearestDist = 100;
+            int nearestDist = 1000;
             for (int index = 0; index < TargetPets.Count; ++index)
             {
                 var pet = Simulator.CurrentScene.Pets[TargetPets[index]];
                 var currentDist = Board.CalcManhattanDistance(humansCog, pet.Pos);
                 if(currentDist < nearestDist 
-                    && pet.GetType() != typeof(Rabbit) 
+                    && pet.GetType() != typeof(Rabbit))
                 {
                     nearestDist = currentDist;
-                    nearestIndex = index;
+                    nearestIndex = pet.Index;
                 }
             }
             return nearestIndex;
